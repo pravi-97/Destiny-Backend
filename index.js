@@ -1,9 +1,4 @@
 require('dotenv').config();
-const AWS_ACCESS_KEY = process.env.AWS_ACCESS_KEY;
-const AWS_SECRET_KEY = process.env.AWS_SECRET_KEY;
-const AWS_REGION = process.env.AWS_REGION;
-const MODEL_NAME = process.env.MODEL_NAME;
-const PALM_API_KEY = process.env.PALM_API_KEY;
 const AWS = require('aws-sdk');
 const multer = require('multer');
 const express = require('express');
@@ -11,10 +6,16 @@ const cors = require('cors');
 const axios = require('axios')
 const { TextServiceClient } = require("@google-ai/generativelanguage").v1beta2;
 const { GoogleAuth } = require("google-auth-library");
-const app = express();
-const bodyParser = require('body-parser');
-const upload = multer();
+
+const AWS_ACCESS_KEY = process.env.AWS_ACCESS_KEY;
+const AWS_SECRET_KEY = process.env.AWS_SECRET_KEY;
+const AWS_REGION = process.env.AWS_REGION;
+const MODEL_NAME = process.env.MODEL_NAME;
+const PALM_API_KEY = process.env.PALM_API_KEY;
 let timestamp;
+const app = express();
+const upload = multer();
+
 AWS.config.update({
     accessKeyId: AWS_ACCESS_KEY, 
     secretAccessKey: AWS_SECRET_KEY, 
@@ -25,6 +26,7 @@ const googleClient = new TextServiceClient({
 });
 const transcribeService = new AWS.TranscribeService();
 const pollyClient = new AWS.Polly();
+
 // Function to wait for the transcription job to complete and print the results
 async function waitForTranscriptionJob(jobName, res) {
     const params = { TranscriptionJobName: jobName };
@@ -38,9 +40,9 @@ async function waitForTranscriptionJob(jobName, res) {
 
             // Fetch and print the transcription results
             const transcription = await fetchTranscriptionResult(transcriptionUrl);
-            console.log('Transcription result:', transcription);
+            // console.log('Transcription result:', transcription);
             runPalm(transcription, res);
-            // res.status(200).json({ success: transcription });
+
         } else if (jobStatus === 'FAILED' || jobStatus === 'STOPPED') {
             console.error('Transcription job failed or stopped.');
             res.status(500).json({ error: 'Transcription job failed or stopped.' });
@@ -72,17 +74,15 @@ async function runPalm(prompt, res) {
         },
     })
         .then((result) => {
-            // console.log(JSON.stringify(result[0].candidates[0].output));
             let toPolly = JSON.stringify(result[0].candidates[0].output)
             toPolly = toPolly.replace(/\\n/g, "");
             toPolly = toPolly.replace(/\\r/g, "");
             toPolly = toPolly.replace(/\\t/g, "");
-            // toPolly = toPolly.replace("*/g", "");
             runPolly(toPolly, res)
         });
 }
 async function runPolly(textToSpeak, res) {
-    console.log("textToSpeak: ", textToSpeak);
+    // console.log("textToSpeak: ", textToSpeak);
     const params = {
         OutputFormat: 'mp3',
         SampleRate: '16000',
@@ -122,37 +122,9 @@ async function startTranscriptionJob(res) {
     }
 }
 
-app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-
-
-app.post('/transcribe', upload.single('audioData'), async (req, res) => {
-    timestamp = Date.now();
-    const fileBuf = req.file.buffer;
-
-    const bucketName = 'praveesh-project-destiny'; 
-    const objectKey = `${timestamp}-audio.webm`;
-
-    try {
-        const response = await uploadToS3(fileBuf, bucketName, objectKey);
-        const uploadedETag = response.ETag;
-
-        console.log('File uploaded successfully.');
-        console.log('ETag value:', uploadedETag);
-        startTranscriptionJob(res);
-
-    } catch (error) {
-        console.error('Error uploading file:', error);
-        res.status(500).json({ error: 'Error uploading file' });
-    }
-});
-
 // Function to upload the file to S3
 async function uploadToS3(file, bucketName, objectKey) {
     const s3 = new AWS.S3();
-
-    // Set up the parameters for the S3 object
     const params = {
         Bucket: bucketName,
         Key: objectKey,
@@ -161,6 +133,26 @@ async function uploadToS3(file, bucketName, objectKey) {
 
     return s3.putObject(params).promise();
 }
+
+app.use(cors());
+
+app.post('/getresponse', upload.single('audioData'), async (req, res) => {
+    timestamp = Date.now();
+    const fileBuf = req.file.buffer;
+
+    const bucketName = 'praveesh-project-destiny'; 
+    const objectKey = `${timestamp}-audio.webm`;
+
+    try {
+        const response = await uploadToS3(fileBuf, bucketName, objectKey);
+        // console.log('File uploaded successfully.');
+        startTranscriptionJob(res);
+
+    } catch (error) {
+        console.error('Error uploading file:', error);
+        res.status(500).json({ error: 'Error uploading file' });
+    }
+});
 
 const port = 3001;
 app.listen(port, () => {
