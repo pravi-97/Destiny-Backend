@@ -12,13 +12,16 @@ const AWS_SECRET_KEY = process.env.AWS_SECRET_KEY;
 const AWS_REGION = process.env.AWS_REGION;
 const MODEL_NAME = process.env.MODEL_NAME;
 const PALM_API_KEY = process.env.PALM_API_KEY;
+const S3_URL = process.env.S3_URL;
+const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME;
+
 let timestamp;
 const app = express();
 const upload = multer();
 
 AWS.config.update({
-    accessKeyId: AWS_ACCESS_KEY, 
-    secretAccessKey: AWS_SECRET_KEY, 
+    accessKeyId: AWS_ACCESS_KEY,
+    secretAccessKey: AWS_SECRET_KEY,
     region: AWS_REGION
 });
 const googleClient = new TextServiceClient({
@@ -87,7 +90,7 @@ async function runPolly(textToSpeak, res) {
         OutputFormat: 'mp3',
         SampleRate: '16000',
         Text: textToSpeak,
-        VoiceId: 'Ruth', 
+        VoiceId: 'Ruth',
         Engine: 'neural',
     };
 
@@ -104,10 +107,10 @@ async function runPolly(textToSpeak, res) {
 // Function to start the transcription job
 async function startTranscriptionJob(res) {
     const params = {
-        TranscriptionJobName: `${timestamp}-destiny-test-job`, 
-        LanguageCode: 'en-US', 
+        TranscriptionJobName: `${timestamp}-destiny-test-job`,
+        LanguageCode: 'en-US',
         Media: {
-            MediaFileUri: `s3://praveesh-project-destiny/${timestamp}-audio.webm`, 
+            MediaFileUri: `${S3_URL}${timestamp}-audio.webm`,
         },
     };
 
@@ -139,8 +142,8 @@ app.use(cors());
 app.post('/getresponse', upload.single('audioData'), async (req, res) => {
     timestamp = Date.now();
     const fileBuf = req.file.buffer;
-
-    const bucketName = 'praveesh-project-destiny'; 
+    // res.status(200).json({ test: 'Received Audio File' });
+    const bucketName = `${S3_BUCKET_NAME}`;
     const objectKey = `${timestamp}-audio.webm`;
 
     try {
