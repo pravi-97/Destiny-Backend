@@ -43,8 +43,9 @@ async function waitForTranscriptionJob(jobName, res) {
 
             // Fetch and print the transcription results
             const transcription = await fetchTranscriptionResult(transcriptionUrl);
-            // console.log('Transcription result:', transcription);
-            runPalm(transcription, res);
+            if (transcription.length > 0) runPalm(transcription, res);
+            else res.status(500).json({ error: 'No transcription found' });
+            
 
         } else if (jobStatus === 'FAILED' || jobStatus === 'STOPPED') {
             console.error('Transcription job failed or stopped.');
@@ -70,22 +71,28 @@ async function fetchTranscriptionResult(url) {
     }
 }
 async function runPalm(prompt, res) {
-    googleClient.generateText({
+    // googleClient.generateText({
+    const generateTextRequest = {
         model: MODEL_NAME,
         prompt: {
             text: prompt,
         },
-    })
-        .then((result) => {
-            let toPolly = JSON.stringify(result[0].candidates[0].output)
-            toPolly = toPolly.replace(/\\n/g, "");
-            toPolly = toPolly.replace(/\\r/g, "");
-            toPolly = toPolly.replace(/\\t/g, "");
-            runPolly(toPolly, res)
-        });
+    }
+    try {
+        const result = await googleClient.generateText(generateTextRequest);
+        let toPolly = JSON.stringify(result[0].candidates[0].output)
+        toPolly = toPolly.replace(/\\n/g, "");
+        toPolly = toPolly.replace(/\\r/g, "");
+        toPolly = toPolly.replace(/\\t/g, "");
+        toPolly = toPolly.replace(/\\"/g, "\"");
+        runPolly(toPolly, res)
+    } catch (err) {
+        res.status(500).json({ error: 'Error generating text' });
+    }
+    
 }
 async function runPolly(textToSpeak, res) {
-    // console.log("textToSpeak: ", textToSpeak);
+    console.log("textToSpeak: ", textToSpeak);
     const params = {
         OutputFormat: 'mp3',
         SampleRate: '16000',
@@ -143,7 +150,7 @@ app.post('/getresponse', upload.single('audioData'), async (req, res) => {
     timestamp = Date.now();
     const fileBuf = req.file.buffer;
     // res.status(200).json({ test: 'Received Audio File' });
-    const bucketName = `${S3_BUCKET_NAME}`;
+    const bucketName = S3_BUCKET_NAME;
     const objectKey = `${timestamp}-audio.webm`;
 
     try {
